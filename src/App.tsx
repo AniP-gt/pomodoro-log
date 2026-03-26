@@ -30,8 +30,6 @@ const App = () => {
     config,
     currentComment,
     sessionStartTime,
-    setPhase,
-    setTimeLeft,
     setIsActive,
     setWorkCount,
     setShowSettings,
