@@ -133,7 +133,7 @@ export const getDynamicPath = (baseDirectory: string): string => {
   const dd = String(now.getDate()).padStart(2, '0');
 
   const base = baseDirectory.endsWith('/') ? baseDirectory : baseDirectory + '/';
-  return `${base}${yyyy}/${mm}/${yyyy}-${mm}-${dd}.md`;
+  return `${base}${yyyy}年/${mm}月/${yyyy}-${mm}-${dd}.md`;
 };
 
 export const formatTime = (seconds: number): string => {
