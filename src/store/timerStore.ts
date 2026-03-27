@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 
 export type TimerPhase = 'work' | 'shortBreak' | 'longBreak';
 
+export type SoundChoice = 'Glass' | 'Pop' | 'Purr' | 'Basso' | 'Bottle' | 'Ping' | 'Tink' | 'Sosumi';
+
 interface TimerConfig {
   workTime: number;
   shortBreakTime: number;
@@ -11,6 +13,11 @@ interface TimerConfig {
   baseDirectory: string;
   logCommentTemplate: string;
   autoStartNext: boolean;
+  soundEnabled: boolean;
+  notificationEnabled: boolean;
+  workSound: SoundChoice;
+  shortBreakSound: SoundChoice;
+  longBreakSound: SoundChoice;
 }
 
 interface TimerState {
@@ -71,6 +78,11 @@ export const useTimerStore = create<TimerState & TimerActions>()(
         baseDirectory: '/Users/user/Documents/PomodoroLogs',
         logCommentTemplate: '- {time}min | {comment}',
         autoStartNext: false,
+        soundEnabled: true,
+        notificationEnabled: true,
+        workSound: 'Glass',
+        shortBreakSound: 'Pop',
+        longBreakSound: 'Purr',
       },
 
       setPhase: (phase) => set({ phase }),
@@ -132,8 +144,18 @@ export const getDynamicPath = (baseDirectory: string): string => {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
 
-  const base = baseDirectory.endsWith('/') ? baseDirectory : baseDirectory + '/';
-  return `${base}${yyyy}年/${mm}月/${yyyy}-${mm}-${dd}.md`;
+  let path = baseDirectory
+    .replace(/YYYY/g, String(yyyy))
+    .replace(/MM/g, mm)
+    .replace(/DD/g, dd)
+    .replace(/YYYY-MM-DD/g, `${yyyy}-${mm}-${dd}`);
+
+  if (!path.endsWith('.md')) {
+    const base = path.endsWith('/') ? path : path + '/';
+    return `${base}${yyyy}年/${mm}月/${yyyy}-${mm}-${dd}.md`;
+  }
+
+  return path;
 };
 
 export const formatTime = (seconds: number): string => {
