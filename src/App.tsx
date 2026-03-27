@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -32,38 +32,56 @@ const App = () => {
     config,
     currentComment,
     sessionStartTime,
+    setPhase,
+    setTimeLeft,
     setIsActive,
     setWorkCount,
     setShowSettings,
     setConfig,
     setCurrentComment,
-    tick,
+    setSessionStartTime,
     reset,
-    toggleTimer,
     switchPhase,
   } = useTimerStore();
 
   const currentPath = getDynamicPath(config.baseDirectory);
 
-  const handlePhaseEnd = useCallback(async () => {
-    setIsActive(false);
+  const phaseRef = useRef(phase);
+  const configRef = useRef(config);
+  const currentCommentRef = useRef(currentComment);
+  const sessionStartTimeRef = useRef(sessionStartTime);
+  const currentPathRef = useRef(currentPath);
+  
+  phaseRef.current = phase;
+  configRef.current = config;
+  currentCommentRef.current = currentComment;
+  sessionStartTimeRef.current = sessionStartTime;
+  currentPathRef.current = currentPath;
 
-    const duration = getInitialTimeFn(phase, config) / 60;
-    const comment = config.logCommentTemplate
+  const handlePhaseEnd = useCallback(async (completedWorkCount: number, endedPhase: string) => {
+    const phaseVal = phaseRef.current;
+    const configVal = configRef.current;
+    const currentCommentVal = currentCommentRef.current;
+    const sessionStartTimeVal = sessionStartTimeRef.current;
+    const currentPathVal = currentPathRef.current;
+
+    const phaseToLog = phaseVal === 'work' ? phaseVal : phaseVal === 'shortBreak' ? 'shortBreak' : 'longBreak';
+    const duration = getInitialTimeFn(phaseToLog as TimerPhase, configVal) / 60;
+    const comment = configVal.logCommentTemplate
       .replace('{time}', duration.toString())
-      .replace('{comment}', currentComment || '集中セッション');
+      .replace('{comment}', currentCommentVal || '集中セッション');
 
-    const startTimeStr = sessionStartTime
-      ? sessionStartTime.toISOString().split('T')[0]
+    const startTimeStr = sessionStartTimeVal
+      ? sessionStartTimeVal.toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];
 
-    if (config.soundEnabled) {
-      await playSound(config.workSound);
+    if (configVal.soundEnabled) {
+      await playSound(configVal.workSound);
     }
 
     try {
       await invoke('save_log', {
-        path: currentPath,
+        path: currentPathVal,
         content: comment,
         startTime: startTimeStr,
       });
@@ -71,50 +89,86 @@ const App = () => {
       console.error('Failed to save log:', e);
     }
 
-    if (phase === 'work') {
-      const nextCount = workCount + 1;
-      setWorkCount(nextCount);
+    if (endedPhase === 'work') {
+      setWorkCount(completedWorkCount);
       
-      if (config.notificationEnabled) {
+      if (configVal.notificationEnabled) {
         showNotification('work-complete');
       }
-      if (config.soundEnabled) {
-        const breakSound = nextCount % config.longBreakInterval === 0 
-          ? config.longBreakSound 
-          : config.shortBreakSound;
+      if (configVal.soundEnabled) {
+        const breakSound = completedWorkCount % configVal.longBreakInterval === 0 
+          ? configVal.longBreakSound 
+          : configVal.shortBreakSound;
         await playSound(breakSound);
       }
       
-      if (nextCount % config.longBreakInterval === 0) {
+      if (completedWorkCount % configVal.longBreakInterval === 0) {
         switchPhase('longBreak');
       } else {
         switchPhase('shortBreak');
       }
     } else {
-      if (config.notificationEnabled) {
+      if (configVal.notificationEnabled) {
         showNotification('break-complete');
       }
-      if (config.soundEnabled) {
-        await playSound(config.workSound);
+      if (configVal.soundEnabled) {
+        await playSound(configVal.workSound);
       }
       switchPhase('work');
     }
     setCurrentComment('');
-  }, [phase, config, currentComment, currentPath, sessionStartTime, workCount, config.longBreakInterval, setIsActive, setWorkCount, switchPhase, setCurrentComment]);
+    setSessionStartTime(null);
+  }, [setWorkCount, setCurrentComment, setSessionStartTime, switchPhase]);
 
+  // Listen for timer tick from Rust backend
   useEffect(() => {
-    let timer: number | null = null;
-    if (isActive && timeLeft > 0) {
-      timer = window.setInterval(() => {
-        tick();
-      }, 1000);
-    } else if (timeLeft === 0 && isActive) {
-      handlePhaseEnd();
-    }
+    const unlistenTick = listen<{ phase: string; time_left: number; is_active: boolean; work_count: number }>('timer-tick', (event) => {
+      const state = event.payload;
+      setPhase(state.phase as TimerPhase);
+      setTimeLeft(state.time_left);
+      setIsActive(state.is_active);
+      setWorkCount(state.work_count);
+    });
+
+    const unlistenPhaseEnd = listen<{ phase: string; completed: number }>('timer-phase-end', (event) => {
+      const { phase: endedPhase, completed } = event.payload;
+      setIsActive(false);
+      
+      if (endedPhase === 'work') {
+        handlePhaseEnd(completed, endedPhase);
+      } else {
+        handlePhaseEnd(completed, endedPhase);
+      }
+    });
+
     return () => {
-      if (timer) clearInterval(timer);
+      unlistenTick.then(fn => fn());
+      unlistenPhaseEnd.then(fn => fn());
     };
-  }, [isActive, timeLeft, tick, handlePhaseEnd]);
+  }, [handlePhaseEnd, setPhase, setTimeLeft, setIsActive, setWorkCount]);
+
+  const handleStartTimer = useCallback(async () => {
+    if (!sessionStartTimeRef.current) {
+      setSessionStartTime(new Date());
+    }
+    setIsActive(true);
+    await invoke('start_timer', {
+      workTime: configRef.current.workTime,
+      shortBreak: configRef.current.shortBreakTime,
+      longBreak: configRef.current.longBreakTime,
+      longBreakInterval: configRef.current.longBreakInterval,
+    });
+  }, [setIsActive, setSessionStartTime]);
+
+  const handlePauseTimer = useCallback(async () => {
+    setIsActive(false);
+    await invoke('pause_timer');
+  }, [setIsActive]);
+
+  const handleResetTimer = useCallback(async () => {
+    await invoke('reset_timer', { workTime: configRef.current.workTime });
+    reset();
+  }, [reset]);
 
   useEffect(() => {
     const updateTray = async () => {
@@ -133,13 +187,13 @@ const App = () => {
     const unlisten = listen<string>('tray-action', (event) => {
       switch (event.payload) {
         case 'start':
-          if (!isActive) toggleTimer();
+          if (!isActive) handleStartTimer();
           break;
         case 'pause':
-          if (isActive) toggleTimer();
+          if (isActive) handlePauseTimer();
           break;
         case 'reset':
-          reset();
+          handleResetTimer();
           break;
       }
     });
@@ -147,7 +201,7 @@ const App = () => {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [isActive, toggleTimer, reset]);
+  }, [isActive, handleStartTimer, handlePauseTimer, handleResetTimer]);
 
   const handleSelectDirectory = async () => {
     const selected = await open({
@@ -158,10 +212,6 @@ const App = () => {
     if (selected && typeof selected === 'string') {
       setConfig({ baseDirectory: selected });
     }
-  };
-
-  const handleResetTimer = () => {
-    reset();
   };
 
   const handleSwitchPhase = (p: TimerPhase) => {
@@ -224,7 +274,7 @@ const App = () => {
 
               <button
                 type="button"
-                onClick={toggleTimer}
+                onClick={isActive ? handlePauseTimer : handleStartTimer}
                 className={`w-24 h-24 rounded-[2rem] flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl ${
                   isActive
                     ? 'bg-slate-100 text-slate-900'
