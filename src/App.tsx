@@ -19,6 +19,8 @@ import {
   getInitialTimeFn,
   TimerPhase,
 } from './store/timerStore';
+import { playSound } from './utils/sound';
+import { showNotification } from './utils/notification';
 
 const App = () => {
   const {
@@ -55,6 +57,10 @@ const App = () => {
       ? sessionStartTime.toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0];
 
+    if (config.soundEnabled) {
+      await playSound(config.workSound);
+    }
+
     try {
       await invoke('save_log', {
         path: currentPath,
@@ -68,12 +74,29 @@ const App = () => {
     if (phase === 'work') {
       const nextCount = workCount + 1;
       setWorkCount(nextCount);
+      
+      if (config.notificationEnabled) {
+        showNotification('work-complete');
+      }
+      if (config.soundEnabled) {
+        const breakSound = nextCount % config.longBreakInterval === 0 
+          ? config.longBreakSound 
+          : config.shortBreakSound;
+        await playSound(breakSound);
+      }
+      
       if (nextCount % config.longBreakInterval === 0) {
         switchPhase('longBreak');
       } else {
         switchPhase('shortBreak');
       }
     } else {
+      if (config.notificationEnabled) {
+        showNotification('break-complete');
+      }
+      if (config.soundEnabled) {
+        await playSound(config.workSound);
+      }
       switchPhase('work');
     }
     setCurrentComment('');
@@ -312,6 +335,121 @@ const App = () => {
                 />
                 <p className="text-[9px] text-slate-500 mt-2 italic">Available: {'{time}'}, {'{comment}'}</p>
               </div>
+
+              <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="soundEnabled" className="text-[10px] uppercase font-black text-slate-500">Sound Effects</label>
+                  <button
+                    id="soundEnabled"
+                    type="button"
+                    onClick={() => setConfig({ soundEnabled: !config.soundEnabled })}
+                    className={`w-12 h-6 rounded-full transition-all ${
+                      config.soundEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      config.soundEnabled ? 'translate-x-6' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="notificationEnabled" className="text-[10px] uppercase font-black text-slate-500">Notifications</label>
+                  <button
+                    id="notificationEnabled"
+                    type="button"
+                    onClick={() => setConfig({ notificationEnabled: !config.notificationEnabled })}
+                    className={`w-12 h-6 rounded-full transition-all ${
+                      config.notificationEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      config.notificationEnabled ? 'translate-x-6' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+                
+                <div className="space-y-2 pt-2 border-t border-slate-700/30">
+                  <span className="text-[10px] uppercase font-black text-slate-500 block">Sound Selection</span>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-slate-400 w-16">Work End</span>
+                      <select
+                        id="workSound"
+                        value={config.workSound}
+                        onChange={(e) => setConfig({ workSound: e.target.value as any })}
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-300"
+                      >
+                        <option value="Glass">Glass</option>
+                        <option value="Pop">Pop</option>
+                        <option value="Purr">Purr</option>
+                        <option value="Basso">Basso</option>
+                        <option value="Bottle">Bottle</option>
+                        <option value="Ping">Ping</option>
+                        <option value="Tink">Tink</option>
+                        <option value="Sosumi">Sosumi</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => playSound(config.workSound)}
+                        className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                      >
+                        <span className="text-xs">🔊</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-slate-400 w-16">Short Break</span>
+                      <select
+                        id="shortBreakSound"
+                        value={config.shortBreakSound}
+                        onChange={(e) => setConfig({ shortBreakSound: e.target.value as any })}
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-300"
+                      >
+                        <option value="Glass">Glass</option>
+                        <option value="Pop">Pop</option>
+                        <option value="Purr">Purr</option>
+                        <option value="Basso">Basso</option>
+                        <option value="Bottle">Bottle</option>
+                        <option value="Ping">Ping</option>
+                        <option value="Tink">Tink</option>
+                        <option value="Sosumi">Sosumi</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => playSound(config.shortBreakSound)}
+                        className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                      >
+                        <span className="text-xs">🔊</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-slate-400 w-16">Long Break</span>
+                      <select
+                        id="longBreakSound"
+                        value={config.longBreakSound}
+                        onChange={(e) => setConfig({ longBreakSound: e.target.value as any })}
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-xs text-slate-300"
+                      >
+                        <option value="Glass">Glass</option>
+                        <option value="Pop">Pop</option>
+                        <option value="Purr">Purr</option>
+                        <option value="Basso">Basso</option>
+                        <option value="Bottle">Bottle</option>
+                        <option value="Ping">Ping</option>
+                        <option value="Tink">Tink</option>
+                        <option value="Sosumi">Sosumi</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => playSound(config.longBreakSound)}
+                        className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                      >
+                        <span className="text-xs">🔊</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <button
@@ -333,9 +471,6 @@ const App = () => {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">System Tray Active</span>
-        </div>
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700/50">
-          Target: macOS Sonoma+
         </div>
       </div>
     </div>

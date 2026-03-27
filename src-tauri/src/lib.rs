@@ -52,6 +52,27 @@ fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[tauri::command]
+fn play_sound(sound_name: String) -> Result<(), String> {
+    use std::process::Command;
+
+    log::info!("Playing sound: {}", sound_name);
+
+    let output = Command::new("afplay")
+        .arg(format!("/System/Library/Sounds/{}.aiff", sound_name))
+        .output()
+        .map_err(|e| format!("Failed to execute: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::error!("Sound failed: {}", stderr);
+        return Err(format!("Sound failed: {}", stderr));
+    }
+
+    log::info!("Sound played successfully");
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -61,6 +82,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 let window_clone = window.clone();
@@ -140,7 +163,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_log,
             update_tray_title,
-            get_app_version
+            get_app_version,
+            play_sound
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

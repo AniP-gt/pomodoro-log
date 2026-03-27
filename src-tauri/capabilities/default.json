@@ -23,6 +23,28 @@
     "fs:allow-mkdir",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    "notification:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "notification:allow-show",
+    "shell:default",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "say",
+          "cmd": "say",
+          "args": true
+        },
+        {
+          "name": "afplay",
+          "cmd": "afplay",
+          "args": true
+        }
+      ]
+    }
   ]
 }
