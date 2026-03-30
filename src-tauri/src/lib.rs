@@ -19,8 +19,8 @@ pub struct TimerState {
 
 struct AppState {
     tray_title: Mutex<String>,
-    timer_state: Mutex<TimerState>,
-    timer_running: Mutex<bool>,
+    timer_state: Arc<Mutex<TimerState>>,
+    timer_running: Arc<Mutex<bool>>,
 }
 
 #[tauri::command]
@@ -92,10 +92,8 @@ fn start_timer(
     drop(timer);
 
     let app_handle_clone = app_handle.clone();
-    let timer_state_inner = state.timer_state.lock().unwrap().clone();
-    let timer_running_inner = state.timer_running.lock().unwrap().clone();
-    let timer_state_arc = Arc::new(Mutex::new(timer_state_inner));
-    let timer_running_arc = Arc::new(Mutex::new(timer_running_inner));
+    let timer_state_arc = state.timer_state.clone();
+    let timer_running_arc = state.timer_running.clone();
     let work_time_sec = work_time * 60;
     let short_break_sec = short_break * 60;
     let long_break_sec = long_break * 60;
@@ -249,13 +247,13 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
             tray_title: Mutex::new(String::new()),
-            timer_state: Mutex::new(TimerState {
+            timer_state: Arc::new(Mutex::new(TimerState {
                 phase: "work".to_string(),
                 time_left: 25 * 60,
                 is_active: false,
                 work_count: 0,
-            }),
-            timer_running: Mutex::new(false),
+            })),
+            timer_running: Arc::new(Mutex::new(false)),
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
