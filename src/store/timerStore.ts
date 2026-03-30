@@ -105,10 +105,12 @@ export const useTimerStore = create<TimerState & TimerActions>()(
       },
 
       reset: () => {
-        const { phase, config } = get();
+        const { config } = get();
         set({
+          phase: 'work',
           isActive: false,
-          timeLeft: getInitialTime(phase, config),
+          timeLeft: getInitialTime('work', config),
+          workCount: 0,
           sessionStartTime: null,
         });
       },
