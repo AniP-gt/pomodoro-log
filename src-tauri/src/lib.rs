@@ -200,7 +200,7 @@ fn pause_timer(state: State<AppState>) {
 }
 
 #[tauri::command]
-fn reset_timer(state: State<AppState>, work_time: u32) {
+fn reset_timer(app_handle: tauri::AppHandle, state: State<AppState>, work_time: u32) {
     let mut running = state.timer_running.lock().unwrap();
     *running = false;
     drop(running);
@@ -210,6 +210,17 @@ fn reset_timer(state: State<AppState>, work_time: u32) {
     timer.time_left = work_time * 60;
     timer.is_active = false;
     timer.work_count = 0;
+
+    // Emit reset state to frontend
+    let _ = app_handle.emit(
+        "timer-tick",
+        TimerState {
+            phase: "work".to_string(),
+            time_left: work_time * 60,
+            is_active: false,
+            work_count: 0,
+        },
+    );
 }
 
 #[tauri::command]
